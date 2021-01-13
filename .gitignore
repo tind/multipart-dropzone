@@ -6,8 +6,4 @@ node_modules
 _site
 _config.yaml
 .idea
-dist
 package-lock.json
-
-# The GitLab pages artifacts
-public

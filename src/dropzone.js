@@ -901,7 +901,11 @@ class Dropzone extends Emitter {
 
       queuecomplete() { },
 
-      addedfiles() { }
+      addedfiles() { },
+
+      // When uploading multiple chunks, this function is called before the chunk is uploaded.
+      // This function receives the file as first argument and the chunk as second.
+      processingchunk() { }
     };
 
 
@@ -1964,6 +1968,7 @@ class Dropzone extends Emitter {
             retries: 0 // The number of times this block has been retried.
           };
 
+          this.options.processingchunk(file, file.upload.chunks[chunkIndex]);
 
           this._uploadData(files, [dataBlock]);
         };
@@ -1974,6 +1979,10 @@ class Dropzone extends Emitter {
 
           // Clear the data from the chunk
           chunk.dataBlock = null;
+
+          // Add etag information for the chunk for later multipart zipping
+          chunk.etag = chunk.xhr.getResponseHeader('etag');
+
           // Leaving this reference to xhr intact here will cause memory leaks in some browsers
           chunk.xhr = null;
 
