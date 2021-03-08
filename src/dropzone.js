@@ -191,6 +191,15 @@ class Dropzone extends Emitter {
       forceChunking: false,
 
       /**
+       * If `chunking` is enabled, this defines whether the chunk data is being uploaded
+       * directly to an object store or if it passes through a server first. Object stores
+       * such as S3 expect only file data during upload rather than form data. If set to
+       * true, this ensures the upload is cleaned of form data that is not then present
+       * in the object saved in the object store.
+       */
+      chunkDirectUpload: false,
+
+      /**
        * If `chunking` is `true`, then this defines the chunk size in bytes.
        */
       chunkSize: 2000000,
@@ -2092,26 +2101,33 @@ class Dropzone extends Emitter {
       }
     }
 
-    let formData = new FormData();
+    let formData;
 
-    // Adding all @options parameters
-    if (this.options.params) {
-      let additionalParams = this.options.params;
-      if (typeof additionalParams === 'function') {
-        additionalParams = additionalParams.call(this, files, xhr, files[0].upload.chunked ? this._getChunk(files[0], xhr) : null);
-      }
+    // Ensure only the binary file data is sent if a direct multipart upload is requested
+    if (files[0].upload.chunked && this.options.chunkDirectUpload) {
+      formData = '';
+    } else {
+      formData = new FormData();
 
-      for (let key in additionalParams) {
-        let value = additionalParams[key];
-        if (Array.isArray(value)) {
-          // The additional parameter contains an array,
-          // so lets iterate over it to attach each value
-          // individually.
-          for (let i = 0; i < value.length; i++) {
-            formData.append(key, value[i]);
+      // Adding all @options parameters
+      if (this.options.params) {
+        let additionalParams = this.options.params;
+        if (typeof additionalParams === 'function') {
+          additionalParams = additionalParams.call(this, files, xhr, files[0].upload.chunked ? this._getChunk(files[0], xhr) : null);
+        }
+
+        for (let key in additionalParams) {
+          let value = additionalParams[key];
+          if (Array.isArray(value)) {
+            // The additional parameter contains an array,
+            // so lets iterate over it to attach each value
+            // individually.
+            for (let i = 0; i < value.length; i++) {
+              formData.append(key, value[i]);
+            }
+          } else {
+            formData.append(key, value);
           }
-        } else {
-          formData.append(key, value);
         }
       }
     }
@@ -2132,7 +2148,13 @@ class Dropzone extends Emitter {
     // Has to be last because some servers (eg: S3) expect the file to be the last parameter
     for (let i = 0; i < dataBlocks.length; i++) {
       let dataBlock = dataBlocks[i];
-      formData.append(dataBlock.name, dataBlock.data, dataBlock.filename);
+      // Ensure only the binary file data is sent if a direct multipart upload is requested
+      if (files[0].upload.chunked && this.options.chunkDirectUpload) {
+        // Chunked uploads only have one data block
+        formData = dataBlock.data;
+      } else {
+        formData.append(dataBlock.name, dataBlock.data, dataBlock.filename);
+      }
     }
 
     this.submitRequest(xhr, formData, files);

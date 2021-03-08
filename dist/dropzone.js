@@ -218,6 +218,15 @@ var Dropzone = /*#__PURE__*/function (_Emitter) {
         forceChunking: false,
 
         /**
+         * If `chunking` is enabled, this defines whether the chunk data is being uploaded
+         * directly to an object store or if it passes through a server first. Object stores
+         * such as S3 expect only file data during upload rather than form data. If set to
+         * true, this ensures the upload is cleaned of form data that is not then present
+         * in the object saved in the object store.
+         */
+        chunkDirectUpload: false,
+
+        /**
          * If `chunking` is `true`, then this defines the chunk size in bytes.
          */
         chunkSize: 2000000,
@@ -2441,27 +2450,33 @@ var Dropzone = /*#__PURE__*/function (_Emitter) {
         }
       }
 
-      var formData = new FormData(); // Adding all @options parameters
+      var formData; // Ensure only the binary file data is sent if a direct multipart upload is requested
 
-      if (this.options.params) {
-        var additionalParams = this.options.params;
+      if (files[0].upload.chunked && this.options.chunkDirectUpload) {
+        formData = '';
+      } else {
+        formData = new FormData(); // Adding all @options parameters
 
-        if (typeof additionalParams === 'function') {
-          additionalParams = additionalParams.call(this, files, xhr, files[0].upload.chunked ? this._getChunk(files[0], xhr) : null);
-        }
+        if (this.options.params) {
+          var additionalParams = this.options.params;
 
-        for (var key in additionalParams) {
-          var value = additionalParams[key];
+          if (typeof additionalParams === 'function') {
+            additionalParams = additionalParams.call(this, files, xhr, files[0].upload.chunked ? this._getChunk(files[0], xhr) : null);
+          }
 
-          if (Array.isArray(value)) {
-            // The additional parameter contains an array,
-            // so lets iterate over it to attach each value
-            // individually.
-            for (var i = 0; i < value.length; i++) {
-              formData.append(key, value[i]);
+          for (var key in additionalParams) {
+            var value = additionalParams[key];
+
+            if (Array.isArray(value)) {
+              // The additional parameter contains an array,
+              // so lets iterate over it to attach each value
+              // individually.
+              for (var i = 0; i < value.length; i++) {
+                formData.append(key, value[i]);
+              }
+            } else {
+              formData.append(key, value);
             }
-          } else {
-            formData.append(key, value);
           }
         }
       } // Let the user add additional data if necessary
@@ -2490,8 +2505,14 @@ var Dropzone = /*#__PURE__*/function (_Emitter) {
 
 
       for (var _i4 = 0; _i4 < dataBlocks.length; _i4++) {
-        var dataBlock = dataBlocks[_i4];
-        formData.append(dataBlock.name, dataBlock.data, dataBlock.filename);
+        var dataBlock = dataBlocks[_i4]; // Ensure only the binary file data is sent if a direct multipart upload is requested
+
+        if (files[0].upload.chunked && this.options.chunkDirectUpload) {
+          // Chunked uploads only have one data block
+          formData = dataBlock.data;
+        } else {
+          formData.append(dataBlock.name, dataBlock.data, dataBlock.filename);
+        }
       }
 
       this.submitRequest(xhr, formData, files);
